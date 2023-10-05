@@ -128,6 +128,7 @@ type DefaultCommandRunner struct {
 	PullStatusFetcher              PullStatusFetcher
 	TeamAllowlistChecker           *TeamAllowlistChecker
 	VarFileAllowlistChecker        *VarFileAllowlistChecker
+	ProjectContextBuilder          ProjectContextBuilder
 }
 
 // RunAutoplanCommand runs plan and policy_checks when a pull request is opened or updated.
@@ -210,6 +211,34 @@ func (c *DefaultCommandRunner) commentUserDoesNotHavePermissions(baseRepo models
 	if err := c.VCSClient.CreateComment(baseRepo, pullNum, errMsg, ""); err != nil {
 		c.Logger.Err("unable to comment on pull request: %s", err)
 	}
+}
+
+// checkUserPermissions checks if the user has permissions to execute the command
+func (c *DefaultCommandRunner) checkUserPermissionsWithProjects(log logging.SimpleLogging, repo models.Repo, user models.User, cmd *CommentCommand, projects []string) (bool, error) {
+	if c.TeamAllowlistChecker == nil || !c.TeamAllowlistChecker.HasRules() {
+		// allowlist restriction is not enabled
+		return true, nil
+	}
+	teams, err := c.VCSClient.GetTeamNamesForUser(repo, user)
+	if err != nil {
+		return false, err
+	}
+	// cmd.ProjectName can be empty, sometimes it is provided
+	// project name is determined later on looking at modified files
+	// only place this is used currently
+	ok := c.TeamAllowlistChecker.IsCommandAllowed(teams, cmd.Name.String(), projects)
+	//
+	// seals:*:devvm (seals can do anything in devvm project)
+	// dingos:plan:* (dingos can only plan in any project)
+	// if [seals, dingos]
+	// => atlantis apply dingos (this should fail)
+	// => atlantis plan dingos (this should pass)
+	// => atlantis plan seals (this should pass)
+	// => atlantis apply seals (this should pass)
+	if !ok {
+		return false, nil
+	}
+	return true, nil
 }
 
 // checkUserPermissions checks if the user has permissions to execute the command
@@ -307,6 +336,28 @@ func (c *DefaultCommandRunner) RunCommentCommand(baseRepo models.Repo, maybeHead
 	}
 
 	if !c.validateCtxAndComment(ctx, cmd.Name) {
+		return
+	}
+
+	// Do I need to validate before looking at the projects?
+	// passing an invalid project (-p dummy) breaks this...
+	// (-p valid) works
+	// not passing -p works as well
+	projects, err := c.ProjectContextBuilder.BuildProjects(ctx, cmd)
+	if err != nil {
+		log.Err("Unable to build projects, this is likely a bug.", err)
+		return
+	}
+	for _, project := range projects {
+		log.Info("HACKY project: %s", project)
+	}
+	ok, err = c.checkUserPermissionsWithProjects(log, baseRepo, user, cmd, projects)
+	if err != nil {
+		c.Logger.Err("Unable to check user permissions: %s", err)
+		return
+	}
+	if !ok {
+		c.commentUserDoesNotHavePermissions(baseRepo, pullNum, user, cmd)
 		return
 	}
 

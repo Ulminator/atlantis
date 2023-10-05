@@ -780,7 +780,7 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 		command.State:           stateCommandRunner,
 	}
 
-	githubTeamAllowlistChecker, err := events.NewTeamAllowlistChecker(userConfig.GithubTeamAllowlist)
+	githubTeamAllowlistChecker, err := events.NewTeamAllowlistChecker(logger, userConfig.GithubTeamAllowlist)
 	if err != nil {
 		return nil, err
 	}
@@ -812,6 +812,7 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 		PullStatusFetcher:              backend,
 		TeamAllowlistChecker:           githubTeamAllowlistChecker,
 		VarFileAllowlistChecker:        varFileAllowlistChecker,
+		ProjectContextBuilder:          events.ProjectContextBuilder{ProjectCommandBuilder: projectCommandBuilder.ProjectCommandBuilder},
 	}
 	repoAllowlist, err := events.NewRepoAllowlistChecker(userConfig.RepoAllowlist)
 	if err != nil {

@@ -246,6 +246,44 @@ type DefaultProjectCommandBuilder struct {
 	TerraformExecutor terraform.Client
 }
 
+// This is a hack to get access to logic that is encapusalted in ProjectFinder
+type ProjectContextBuilder struct {
+	ProjectCommandBuilder
+}
+
+// This is a hack to get access to logic that is encapusalted in ProjectFinder
+func (p *ProjectContextBuilder) BuildProjects(ctx *command.Context, cmd *CommentCommand) ([]string, error) {
+	// I could use these results and pass them later on instead of recalculating them (which is probably better)
+	// Not doing that for now because it would require a lot of refactoring
+	var projectContexts []command.ProjectContext
+	var projects []string
+	var err error
+	switch cmd.CommandName() {
+	case command.Plan:
+		projectContexts, err = p.ProjectCommandBuilder.BuildPlanCommands(ctx, cmd)
+	case command.Apply:
+		projectContexts, err = p.ProjectCommandBuilder.BuildApplyCommands(ctx, cmd)
+	case command.PolicyCheck:
+		projectContexts, err = p.ProjectCommandBuilder.BuildApprovePoliciesCommands(ctx, cmd)
+	case command.Version:
+		projectContexts, err = p.ProjectCommandBuilder.BuildVersionCommands(ctx, cmd)
+	case command.Import:
+		projectContexts, err = p.ProjectCommandBuilder.BuildImportCommands(ctx, cmd)
+	case command.State:
+		projectContexts, err = p.ProjectCommandBuilder.BuildStateRmCommands(ctx, cmd)
+	default:
+		return nil, fmt.Errorf("unknown command %q", cmd.CommandName())
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	for _, projectContext := range projectContexts {
+		projects = append(projects, projectContext.ProjectName)
+	}
+	return projects, nil
+}
+
 // See ProjectCommandBuilder.BuildAutoplanCommands.
 func (p *DefaultProjectCommandBuilder) BuildAutoplanCommands(ctx *command.Context) ([]command.ProjectContext, error) {
 	projCtxs, err := p.buildAllCommandsByCfg(ctx, command.Plan, "", nil, false)
