@@ -38,6 +38,9 @@ type PullCommand interface {
 	// Dir is the path relative to the repo root to run the command in.
 	// Will never end in "/". If empty then the comment specified no directory.
 	Dir() string
+	// Project is the name of the project, as specified in an atlantis.yaml file,
+	// to run the command on. If empty then the comment specified no project.
+	Project() string
 	// CommandName is the name of the command we're running.
 	CommandName() command.Name
 	// SubCommandName is the subcommand name of the command we're running.
@@ -67,6 +70,11 @@ func (c PolicyCheckCommand) Dir() string {
 	return ""
 }
 
+// Project is empty
+func (c PolicyCheckCommand) Project() string {
+	return ""
+}
+
 // IsVerbose is false for policy_check commands.
 func (c PolicyCheckCommand) IsVerbose() bool {
 	return false
@@ -93,6 +101,11 @@ func (c AutoplanCommand) SubCommandName() string {
 
 // Dir is empty
 func (c AutoplanCommand) Dir() string {
+	return ""
+}
+
+// Project is empty
+func (c AutoplanCommand) Project() string {
 	return ""
 }
 
@@ -150,6 +163,11 @@ func (c CommentCommand) IsForSpecificProject() bool {
 // Dir returns the dir of this command.
 func (c CommentCommand) Dir() string {
 	return c.RepoRelDir
+}
+
+// Project returns the project name of this command.
+func (c CommentCommand) Project() string {
+	return c.ProjectName
 }
 
 // CommandName returns the name of this command.

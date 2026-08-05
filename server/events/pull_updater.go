@@ -28,9 +28,14 @@ func (c *PullUpdater) updatePull(ctx *command.Context, cmd PullCommand, res comm
 	// clutter in a pull/merge request. This will not delete the comment, since the
 	// comment trail may be useful in auditing or backtracing problems.
 	if c.HidePrevPlanComments {
-		ctx.Log.Debug("hiding previous plan comments for command: '%v', directory: '%v'", cmd.CommandName().TitleString(), cmd.Dir())
-		if err := c.VCSClient.HidePrevCommandComments(ctx.Log, ctx.Pull.BaseRepo, ctx.Pull.Num, cmd.CommandName().TitleString(), cmd.Dir()); err != nil {
-			ctx.Log.Err("unable to hide old comments: %s", err)
+		dir, ok := hidePrevCommentsDir(cmd, res)
+		if !ok {
+			ctx.Log.Debug("not hiding previous plan comments for project: '%v' because its directory is unknown", cmd.Project())
+		} else {
+			ctx.Log.Debug("hiding previous plan comments for command: '%v', directory: '%v'", cmd.CommandName().TitleString(), dir)
+			if err := c.VCSClient.HidePrevCommandComments(ctx.Log, ctx.Pull.BaseRepo, ctx.Pull.Num, cmd.CommandName().TitleString(), dir); err != nil {
+				ctx.Log.Err("unable to hide old comments: %s", err)
+			}
 		}
 	}
 
@@ -55,4 +60,21 @@ func (c *PullUpdater) updatePull(ctx *command.Context, cmd PullCommand, res comm
 	if err := c.VCSClient.CreateComment(ctx.Log, ctx.Pull.BaseRepo, ctx.Pull.Num, comment, cmd.CommandName().String()); err != nil {
 		ctx.Log.Err("unable to comment: %s", err)
 	}
+}
+
+// hidePrevCommentsDir returns the directory that previous comments are matched
+// against when hiding them, and whether they should be hidden at all.
+//
+// Commands that target a project by name, ex. `atlantis plan -p project`, don't
+// set a directory, so it's taken from the project that was run. Without it every
+// previous comment for the command is hidden, including the comments of projects
+// that this command didn't run on.
+func hidePrevCommentsDir(cmd PullCommand, res command.Result) (string, bool) {
+	if cmd.Dir() != "" || cmd.Project() == "" {
+		return cmd.Dir(), true
+	}
+	if len(res.ProjectResults) == 1 && res.ProjectResults[0].RepoRelDir != "" {
+		return res.ProjectResults[0].RepoRelDir, true
+	}
+	return "", false
 }
